@@ -21,9 +21,9 @@ const corsOptions = {
   origin: [
     process.env.CLIENT_URL,
     process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
-    'http://localhost:5173', // For local development
-    'http://localhost:3000', // Alternative local port
-    'https://localhost:5173', // HTTPS local
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'https://localhost:5173',
   ].filter(Boolean),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -33,10 +33,11 @@ const corsOptions = {
 // Middleware
 app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
+
+// File upload configuration optimized for Vercel
 app.use(fileUpload({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
-  useTempFiles: true,
-  tempFileDir: '/tmp/',
+  useTempFiles: false, // Use memory instead of temp files for Vercel
   createParentPath: true
 }));
 
@@ -95,16 +96,13 @@ app.use('*', (req, res) => {
   });
 });
 
-// For Vercel deployment
-if (process.env.NODE_ENV === 'production') {
-  module.exports = app;
-} else {
-  // For local development
+// Local development server
+if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`API URL: http://localhost:${PORT}/api`);
   });
 }
 
-// Export for Vercel
+// Export for Vercel - Single export
 module.exports = app;
