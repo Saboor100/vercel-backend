@@ -9,20 +9,22 @@ const paymentRoutes = require('./routes/payment.routes');
 const adminRoutes = require('./routes/admin.routes');
 const pdfRoutes = require('./routes/pdfRoutes');
 const fileUpload = require('express-fileupload');
-const potrace = require('potrace');
-const { exec } = require('child_process');
+
 // Initialize Firebase Admin
 require('./services/firebase-admin');
-const sharp = require('sharp');
-const path = require('path');
-const fs = require('fs');
-const { PDFDocument } = require('pdf-lib');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Enhanced CORS configuration
+// Enhanced CORS configuration for Vercel
 const corsOptions = {
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: [
+    process.env.CLIENT_URL,
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
+    'http://localhost:5173', // For local development
+    'http://localhost:3000', // Alternative local port
+    'https://localhost:5173', // HTTPS local
+  ].filter(Boolean),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -31,22 +33,40 @@ const corsOptions = {
 // Middleware
 app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
-app.use(fileUpload());
+app.use(fileUpload({
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  useTempFiles: true,
+  tempFileDir: '/tmp/',
+  createParentPath: true
+}));
+
 // Add the raw body parser for Stripe webhook before json parser
 app.use('/api/payment/webhook', express.raw({ type: 'application/json' }));
 
 // Other middleware - IMPORTANT: This comes AFTER the webhook middleware
-app.use(express.json());
-app.use(morgan('dev'));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Health check endpoint
+// Only use morgan in development to reduce serverless function overhead
+if (process.env.NODE_ENV !== 'production') {
+  app.use(morgan('dev'));
+}
+
+// Health check endpoints
 app.get('/api', (req, res) => {
   res.json({
-    message: 'Welcome to the API root. Available endpoints: /auth, /resume, /cover-letter, /payment, /admin, /pdf'
+    message: 'Welcome to the API root. Available endpoints: /auth, /resume, /cover-letter, /payment, /admin, /pdf',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
   });
 });
+
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', message: 'Server is running' });
+  res.status(200).json({ 
+    status: 'ok', 
+    message: 'Server is running on Vercel',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Routes
@@ -57,21 +77,34 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', pdfRoutes);
 
-// Endpoint to convert image to CMYK PDF
-
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Server error:', err.stack);
   res.status(500).json({
     success: false,
     message: 'Server Error',
-    error: process.env.NODE_ENV === 'development' ? err.message : null
+    error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
   });
 });
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`API URL: http://localhost:${PORT}/api`);
+// Handle 404 for unknown routes
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.originalUrl} not found`
+  });
 });
 
+// For Vercel deployment
+if (process.env.NODE_ENV === 'production') {
+  module.exports = app;
+} else {
+  // For local development
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`API URL: http://localhost:${PORT}/api`);
+  });
+}
+
+// Export for Vercel
+module.exports = app;
