@@ -24,7 +24,7 @@ const corsOptions = {
     
     // List of allowed origins - update these with your actual Vercel URLs
     const allowedOrigins = [
-      process.env.CLIENT_URL || 'http://localhost:8080',
+      process.env.CLIENT_URL || 'https://vercel-frontend-one-olive.vercel.app',
       'http://localhost:3000',
       'http://localhost:5173',
       'http://localhost:5000',
